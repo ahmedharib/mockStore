@@ -1,5 +1,5 @@
-from typing import Any, Dict
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, model_validator
+from typing import Any
 
 
 class Address(BaseModel):
@@ -11,51 +11,46 @@ class Billing(BaseModel):
 
 
 class CoffeeChargePayload(BaseModel):
-    """RoastPay v2 checkout payload sent by Cupertino Coffee Shop.
-
-    v2 contract requires integer amount_cents and nested billing.address.line1.
-    Legacy fields amount/customer_address are handled via validator for backward compatibility
-    and are never serialized.
-    """
+    """RoastPay v2 checkout payload sent by Cupertino Coffee Shop."""
     order_id: str
     currency: str = "USD"
     amount_cents: int
     billing: Billing
 
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
-
-    @model_validator(mode="before")
+    @model_validator(mode='before')
     @classmethod
-    def _handle_legacy_fields(cls, data: Any) -> Any:
-        if isinstance(data, Dict):
-            # Legacy: amount (float dollars) -> amount_cents (int cents)
-            if "amount_cents" not in data and "amount" in data:
-                try:
-                    data["amount_cents"] = int(round(float(data.pop("amount")) * 100))
-                except Exception:
-                    data.pop("amount", None)
-            else:
-                data.pop("amount", None)
-
-            # Legacy: customer_address -> billing.address.line1
-            if "customer_address" in data:
-                legacy_addr = data.pop("customer_address")
-                if "billing" not in data or not isinstance(data.get("billing"), dict):
-                    data["billing"] = {"address": {"line1": legacy_addr}}
-                else:
-                    billing = data["billing"]
-                    if "address" not in billing or not isinstance(billing["address"], dict):
-                        billing["address"] = {"line1": legacy_addr}
-                    elif "line1" not in billing["address"]:
-                        billing["address"]["line1"] = legacy_addr
+    def _migrate_legacy_fields(cls, data: Any) -> Any:
+        """Backward compatibility: accept legacy v1 fields and coerce to v2."""
+        if isinstance(data, dict):
+            # amount (float dollars) -> amount_cents (int)
+            if "amount" in data and "amount_cents" not in data:
+                amt = data.pop("amount")
+                if amt is not None:
+                    data["amount_cents"] = int(round(float(amt) * 100))
+            # total_dollars alias -> amount_cents
+            if "total_dollars" in data and "amount_cents" not in data:
+                td = data.pop("total_dollars")
+                data["amount_cents"] = int(round(float(td) * 100))
+            # customer_address (flat) -> billing.address.line1 (nested)
+            if "customer_address" in data and "billing" not in data:
+                addr = data.pop("customer_address")
+                data["billing"] = {"address": {"line1": addr}}
+            if "street_address" in data and "billing" not in data:
+                sa = data.pop("street_address")
+                data["billing"] = {"address": {"line1": sa}}
         return data
 
+    @model_validator(mode='after')
+    def _coerce_cents_int(self) -> "CoffeeChargePayload":
+        if isinstance(self.amount_cents, float):
+            object.__setattr__(self, "amount_cents", int(round(self.amount_cents)))
+        return self
+
+    # Backward-compatible read access for internal callers still using legacy names
     @property
     def amount(self) -> float:
-        """Backward-compatible accessor: dollars as float."""
         return self.amount_cents / 100.0
 
     @property
     def customer_address(self) -> str:
-        """Backward-compatible accessor: street address."""
         return self.billing.address.line1
