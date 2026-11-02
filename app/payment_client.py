@@ -39,12 +39,17 @@ def _simulate_roastpay_v2_gateway(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_charge_payload(order_id: str, total_dollars: float, street_address: str) -> Dict[str, Any]:
-    """Builds the outbound JSON dictionary for RoastPay."""
+    """Builds the outbound JSON dictionary for RoastPay v2.
+
+    Preserves backward-compatible signature (total_dollars, street_address)
+    but emits v2-compliant payload: integer amount_cents and nested billing.address.line1.
+    """
+    amount_cents = int(round(total_dollars * 100))
     model = CoffeeChargePayload(
         order_id=order_id,
         currency="USD",
-        amount=total_dollars,
-        customer_address=street_address,
+        amount_cents=amount_cents,
+        billing={"address": {"line1": street_address}},
     )
     return model.model_dump()
 
