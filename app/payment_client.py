@@ -39,12 +39,12 @@ def _simulate_roastpay_v2_gateway(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_charge_payload(order_id: str, total_dollars: float, street_address: str) -> Dict[str, Any]:
-    """Builds the outbound JSON dictionary for RoastPay."""
+    """Builds the outbound JSON dictionary for RoastPay v2."""
     model = CoffeeChargePayload(
         order_id=order_id,
         currency="USD",
-        amount=total_dollars,
-        customer_address=street_address,
+        amount_cents=int(round(float(total_dollars) * 100)),
+        billing={"address": {"line1": street_address}},
     )
     return model.model_dump()
 
