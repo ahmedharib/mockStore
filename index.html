@@ -1123,18 +1123,16 @@
         const duration = Math.round(performance.now() - start);
         latencyEl.innerText = `${duration} ms`;
 
-        if (!res.ok) {
-          throw new Error("Pool exhausted");
-        }
-
-        if (duration > 2000) {
+        if (!res.ok || duration > 800) {
+          latencyEl.className = "font-mono font-bold text-coffee-danger";
+        } else if (duration > 300) {
           latencyEl.className = "font-mono font-semibold text-coffee-warning";
         } else {
           latencyEl.className = "font-mono font-semibold text-coffee-textPrimary";
         }
       } catch (e) {
         const duration = Math.round(performance.now() - start);
-        latencyEl.innerText = `${duration} ms (503)`;
+        latencyEl.innerText = `${duration} ms`;
         latencyEl.className = "font-mono font-bold text-coffee-danger";
       }
     }

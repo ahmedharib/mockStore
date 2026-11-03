@@ -7,7 +7,7 @@
 [![Aegis SRE](https://img.shields.io/badge/Aegis-Autonomous%20SRE-black.svg)](mockstore_aegis.yaml)
 [![Apple Design](https://img.shields.io/badge/Design-Apple%20HIG%208px-gray.svg)](#apple-hig-design-system)
 
-`mockStore` is a full-stack, single-page specialty coffee roastery web application built strictly to **Apple Human Interface Guidelines (HIG)** standards. Behind its polished Cupertino storefront, `mockStore` serves as a dual-vector chaos and contract-drift testbed engineered specifically to benchmark and demonstrate **Aegis** — an autonomous AI Site Reliability Engineer that detects, verifies, and patches production failures.
+`mockStore` is a full-stack, single-page specialty coffee roastery web application. Behind its polished Cupertino storefront, `mockStore` serves as a dual-vector chaos and contract-drift testbed engineered specifically to benchmark and demonstrate **Aegis** — an autonomous AI Site Reliability Engineer that detects, verifies, and patches production failures.
 
 ---
 
