@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from app.payment_models import CoffeeChargePayload
+from app.payment_models import CoffeeChargePayload, Billing, Address
 
 
 class UpstreamContractError(Exception):
@@ -39,14 +39,22 @@ def _simulate_roastpay_v2_gateway(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_charge_payload(order_id: str, total_dollars: float, street_address: str) -> Dict[str, Any]:
-    """Builds the outbound JSON dictionary for RoastPay."""
+    """Builds the outbound JSON dictionary for RoastPay v2.
+
+    Keeps legacy caller signature (total_dollars, street_address) for
+    backward compatibility but emits v2 contract:
+      - amount_cents: int(total_dollars * 100)
+      - billing.address.line1: street_address
+    """
+    amount_cents = int(round(total_dollars * 100))
     model = CoffeeChargePayload(
         order_id=order_id,
         currency="USD",
-        amount=total_dollars,
-        customer_address=street_address,
+        amount_cents=amount_cents,
+        billing=Billing(address=Address(line1=street_address)),
     )
-    return model.model_dump()
+    # Explicitly exclude legacy v1 keys even if set via backward-compat path
+    return model.model_dump(exclude={"amount", "customer_address"}, exclude_none=True)
 
 
 def charge_coffee_order(order_id: str, total_dollars: float, street_address: str) -> Dict[str, Any]:
