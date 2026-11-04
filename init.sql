@@ -70,6 +70,9 @@ INSERT INTO order_items (order_id, product_id, quantity)
 SELECT (random() * 9999 + 1)::int, (random() * 3 + 1)::int, (random() * 2 + 1)::int
 FROM generate_series(1, 50000);
 
--- 4. Permissions
+-- 4. Extensions & Permissions
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app_user;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO app_user;
+GRANT EXECUTE ON FUNCTION pg_stat_statements_reset() TO app_user;
