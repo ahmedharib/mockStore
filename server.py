@@ -5,6 +5,11 @@ import sys
 import traceback
 from pathlib import Path
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load local environment variables from .env
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -75,7 +80,7 @@ class CheckoutRequest(BaseModel):
     product_id: int
     quantity: int
 
-def get_connection():
+def get_connection(timeout: float = 3.0):
     global db_pool
     if db_pool is None:
         init_db_pool()
@@ -84,14 +89,22 @@ def get_connection():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database Connection Pool Unavailable: PostgreSQL container not reachable at localhost:5432"
         )
-    try:
-        # Fails with PoolError if all 15 connections are occupied
-        return db_pool.getconn()
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Database Connection Pool Exhausted: {str(e)}"
-        )
+    start_time = time.time()
+    while True:
+        try:
+            return db_pool.getconn()
+        except pool.PoolError as e:
+            if time.time() - start_time >= timeout:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Database Connection Pool Exhausted: {str(e)}"
+                )
+            time.sleep(0.05)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Database Connection Error: {str(e)}"
+            )
 
 @app.get("/api/v1/products")
 def list_products():
@@ -156,10 +169,10 @@ def checkout_order(req: CheckoutRequest):
                     street_address=street_address
                 )
             except UpstreamContractError as exc:
-                webhook_url = os.getenv("AEGIS_WEBHOOK_URL")
+                webhook_url = os.getenv("AEGIS_WEBHOOK_URL", "http://localhost:8080/webhooks/alert")
                 if webhook_url:
                     try:
-                        httpx.post(
+                        r = httpx.post(
                             webhook_url,
                             json={
                                 "event": "checkout_failed",
@@ -171,8 +184,9 @@ def checkout_order(req: CheckoutRequest):
                             },
                             timeout=5.0
                         )
-                    except Exception:
-                        pass
+                        print(f"[mockStore] Dispatched Vector B alert to {webhook_url} (HTTP {r.status_code})")
+                    except Exception as hook_err:
+                        print(f"[mockStore] Notice: Alert webhook to {webhook_url} failed ({hook_err})")
                 raise HTTPException(status_code=422, detail=exc.detail)
         else:
             # Vector A baseline: simulate payment roundtrip sleep inside transaction (3.5s hold)
@@ -205,10 +219,10 @@ def direct_checkout_endpoint(order_id: str = "ORD-LATTE-1042", total_dollars: fl
             street_address="1 Infinite Loop, Cupertino, CA 95014",
         )
     except UpstreamContractError as exc:
-        webhook_url = os.getenv("AEGIS_WEBHOOK_URL")
+        webhook_url = os.getenv("AEGIS_WEBHOOK_URL", "http://localhost:8080/webhooks/alert")
         if webhook_url:
             try:
-                httpx.post(
+                r = httpx.post(
                     webhook_url,
                     json={
                         "event": "checkout_failed",
@@ -220,8 +234,9 @@ def direct_checkout_endpoint(order_id: str = "ORD-LATTE-1042", total_dollars: fl
                     },
                     timeout=5.0
                 )
-            except Exception:
-                pass
+                print(f"[mockStore] Dispatched Vector B alert to {webhook_url} (HTTP {r.status_code})")
+            except Exception as hook_err:
+                print(f"[mockStore] Notice: Alert webhook to {webhook_url} failed ({hook_err})")
         raise HTTPException(status_code=422, detail=exc.detail)
 
 # Helper to find locust executable regardless of which python was launched
@@ -307,8 +322,12 @@ def pool_status():
     except Exception as e:
         return {"connected": False, "error": str(e), "max_connections": 15, "used_connections": 0}
 
-# Serve frontend directly
+# Serve frontend & static assets directly
 BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 @app.get("/")
 def serve_index():
     index_file = BASE_DIR / "index.html"
