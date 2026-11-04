@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from app.payment_models import CoffeeChargePayload
+from app.payment_models import CoffeeChargePayload, Billing, Address
 
 
 class UpstreamContractError(Exception):
@@ -18,18 +18,15 @@ def _simulate_roastpay_v2_gateway(payload: Dict[str, Any]) -> Dict[str, Any]:
         errors.append("Field 'customer_address' was removed in v2; send 'billing.address.line1'.")
     if not isinstance(payload.get("amount_cents"), int):
         errors.append("Missing or non-integer required field 'amount_cents'.")
-
     billing = payload.get("billing")
     line1 = billing.get("address", {}).get("line1") if isinstance(billing, dict) else None
     if not isinstance(line1, str) or not line1.strip():
         errors.append("Missing required nested string field 'billing.address.line1'.")
-
     if errors:
         raise UpstreamContractError(
             status_code=422,
             detail={"error": "ROASTPAY_V2_SCHEMA_DRIFT", "messages": errors},
         )
-
     return {
         "status": "authorized",
         "gateway_version": "2.0",
@@ -39,12 +36,13 @@ def _simulate_roastpay_v2_gateway(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_charge_payload(order_id: str, total_dollars: float, street_address: str) -> Dict[str, Any]:
-    """Builds the outbound JSON dictionary for RoastPay."""
+    """Builds the outbound JSON dictionary for RoastPay v2. Keeps v1 caller signature for backward compatibility."""
+    amount_cents = int(round(total_dollars * 100))
     model = CoffeeChargePayload(
         order_id=order_id,
         currency="USD",
-        amount=total_dollars,
-        customer_address=street_address,
+        amount_cents=amount_cents,
+        billing=Billing(address=Address(line1=street_address)),
     )
     return model.model_dump()
 
